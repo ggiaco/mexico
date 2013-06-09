@@ -1,0 +1,21 @@
+   <span class="clear"></span><div class="snippet">
+
+	<img src="{featured_image}" width="120" height="120" class="featured_image" />
+    
+    <div class="coupon_detail">
+    		<h1>{coupon_discount} :: {coupon_title}</h1>
+            
+            <div class="coupon_code"><a onclick="copy_to_clipboard('{coupon_code}','{post_id}')" href="{store_url}" target="_blank">{coupon_code}</a></div>
+            <p>{coupon_text_contents}</p>
+    </div><span class="coupon_views" id="coupon_clicks{post_id}">{coupon_views}</span>
+	
+    <span class="clear"></span>
+	<div class="expiry_date">
+		<strong>Expires: {expiry_date} </strong>
+        <div class="coupon_likes">
+        	<a href="javascript:;" onclick="post_likes(this,'like','{post_id}');" class="likes like" title="Total Likes">{likes}</a>
+            <a href="javascript:;" onclick="post_likes(this,'dislike','{post_id}');" class="likes dislike" title="Total Dislikes">{dislikes}</a>
+        </div>
+	</div>
+
+</div>

@@ -1,0 +1,131 @@
+.snippet{
+	-webkit-border-radius:8px;
+	border:solid 1px #999;
+	height:152px !important;
+	overflow:hidden;
+	background-image:url(views-bg.png);
+	background-repeat:no-repeat;
+	background-position:right 0;
+	margin-bottom:20px;
+	line-height:20px !important;
+	background-color:#fff;
+	/*padding:5px;*/
+}
+
+
+
+.snippet h1{
+	color:#060;
+	font-size:18px;
+	margin:15px 0 10px 0 !important;
+	line-height:18px !important;
+	border:none !important;
+}
+
+.snippet .featured_image{
+	float:left;	
+	width:120px;
+	height:120px;
+	padding:0px;
+}
+.snippet .coupon_detail{
+	float:right;
+	height: 94px;
+	width: 75%;
+}
+
+.snippet .coupon_code{
+	border: 1px dashed #bbb;
+	background-image:url(code.gif);
+	background-repeat:no-repeat;
+	background-color:#EFEFEF;
+	padding:0px 5px 0px 30px;
+	height: 25px;
+	line-height: 25px !important;
+}
+
+.snippet .coupon_code a{
+	color:#C00;
+	text-decoration:none;	
+}
+
+.snippet .expiry_date{
+	background:#efefef; border:1px solid #ccc; border-top:0px; padding:5px; font-size:13px;	
+}
+
+.snippet p{
+	font-size:10px;	
+	line-height:12px;
+}
+
+.snippet .clear{
+	display:block;
+	height:1px;
+	float:none;
+	clear:both;	
+}
+
+.snippet .coupon_likes{
+	display:block;	
+	float:right;
+	margin-right:10px;
+}
+
+
+.dv_coupons_ajax_load{
+	display:block;
+	float:right;
+	padding: 0px 5px 5px 25px;
+	width:20px;	
+	background-image:url(ajax.gif) !important;
+	background-repeat:no-repeat;
+	background-position:5px 5px !important;
+	background-color:#fff;
+	margin-right:2px;
+	text-decoration:none;
+	font-size:14px;
+	-webkit-border-radius:5px;
+	border:solid 1px #b0b0b0;
+	color:#036;
+	font-weight:bold;
+}
+
+.snippet .coupon_likes .likes{
+	display:block;
+	float:right;
+	padding: 0px 5px 5px 25px;
+	width:20px;	
+	background-image:url(thumbup.png);
+	background-repeat:no-repeat;
+	background-color:#e0e0e0;
+	margin-right:2px;
+	text-decoration:none;
+	font-size:14px;
+	-webkit-border-radius:5px;
+	border:solid 1px #b0b0b0;
+	color:#036;
+	font-weight:bold;
+}
+
+.snippet .coupon_likes .likes:hover{
+	background-color:#b0b0b0;
+	border:solid 1px #a0a0a0;
+}
+
+.snippet .coupon_likes .like{
+	background-position:0 0;		
+}
+
+.snippet .coupon_likes .dislike{
+	background-position:0 -34px;
+}
+
+.snippet .coupon_views{
+	display:block;
+	color:#ffffff;
+	position:absolute;	
+	right:25px;
+	width:25px;
+	height:50px;
+	font-weight:bold;
+}
