@@ -16,10 +16,12 @@ if ($show_post_content) {
 ?><post
 	ID="<?php the_ID(); ?>"
 	comments_num="<?php echo get_comments_number(); ?>"
-	comments_open="<?php echo comments_open() ? "true" : "false" ?>"
-	facebook_comments="<?php echo isset($options['fbcomment']) ? "true" : "false" ?>">
+	comments_open="<?php echo uppsite_comments_open( get_the_ID() ) ? "true" : "false" ?>"
+	facebook_comments="<?php echo isset($options['fbcomment']) ? "true" : "false" ?>"
+    require_name_email="<?php echo get_option('require_name_email') == 1 ? "true" : "false"?>">
 	<permalink><![CDATA[<?php the_permalink(); ?>]]></permalink>
 	<thumb_url><![CDATA[<?php echo mysiteapp_extract_thumbnail(); ?>]]></thumb_url>
+    <full_img><![CDATA[<?php echo mysiteapp_get_post_featured_image(); ?>]]></full_img>
 	<title><![CDATA[<?php echo html_entity_decode(get_the_title(), ENT_QUOTES, 'UTF-8'); ?>]]></title>
 	<time><![CDATA[<?php the_time('m/d/y G:i'); ?>]]></time>
 	<unix_time><![CDATA[<?php the_time('U'); ?>]]></unix_time>

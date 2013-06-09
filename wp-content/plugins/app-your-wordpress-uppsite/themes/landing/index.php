@@ -1,6 +1,6 @@
 <?php
 $native_url = uppsite_get_native_app('url');
-$base_dir = get_template_directory_uri();
+$base_dir = uppsite_get_template_directory_uri();
 $app_name = mysiteapp_get_prefs_value('app_name', get_bloginfo('name'));
 $navbar_img = mysiteapp_get_prefs_value('navbar_background_url', null);
 $landing_bg = mysiteapp_get_prefs_value('landing_background_url', MYSITEAPP_LANDING_DEFAULT_BG);
@@ -30,7 +30,12 @@ $branded = in_array('about', $hideMenus);
             }
         }
         function btn_selected(elem) {
-            window.location = elem.href + is_permanent;
+            var cacheBuster = "";
+<?php if (uppsite_should_bypass_cache()): ?>
+            document.cookie = "wordpress_logged_in=1; expires=Fri, 3 Jan 2020 20:20:11 UTC; path=<?php echo COOKIEPATH ?>"; // Bypass page-cache plugins
+            cacheBuster = "&cb=" + new String(Math.random()).replace(".", "");
+<?php endif ?>
+            window.location = elem.href + cacheBuster + is_permanent + window.location.hash;
             return false;
         }
         var resizeFunc = function() {

@@ -2,21 +2,21 @@
 define('UPPSITE_REMOTE_SECURE_FRAME', UPPSITE_REMOTE_URL . '/remote/secure');
 define('UPPSITE_REMOTE_SECURE_DASHBOARD', UPPSITE_REMOTE_URL . '/remote/dashboard');
 define('UPPSITE_REMOTE_CREATE', UPPSITE_REMOTE_URL . '/remote/create');
+define('UPPSITE_ADMIN_REQUIRED_LEVEL', 'manage_options');
 require_once( dirname(__FILE__) . '/menu.php' );
 function uppsite_guess_website_type() {
     $isBusiness = get_option('show_on_front') == 'page' && get_option('page_on_front') > 0;
     $isCombined = $isBusiness && get_option('page_for_posts') > 0;
-    return $isCombined ? MYSITEAPP_TYPE_BOTH :
-        ( $isBusiness ? MYSITEAPP_TYPE_BUSINESS : MYSITEAPP_TYPE_CONTENT );
+    return $isCombined ? UPPSITE_TYPE_BOTH :
+        ( $isBusiness ? UPPSITE_TYPE_BUSINESS : UPPSITE_TYPE_CONTENT );
 }
 function uppsite_get_iframe_url() {
-    $url = "";
     if (!uppsite_api_values_set()) {
-        $encoded_url = urlencode(base64_encode(site_url()));
+                $encoded_url = urlencode(base64_encode(site_url()));
         $encoded_pingback = urlencode(base64_encode(get_bloginfo('pingback_url')));
-        $url = UPPSITE_REMOTE_CREATE . "/" . $encoded_url . "/" . $encoded_pingback . "/" . uppsite_remote_get_platform();
+        $url = sprintf("%s/%s/%s/%s", UPPSITE_REMOTE_CREATE, $encoded_url, $encoded_pingback, uppsite_remote_get_platform());
     } else {
-        $page = 'setup';
+                $page = 'setup';
         $extra = '';
         $prefix = UPPSITE_REMOTE_SECURE_FRAME;
         if (uppsite_admin_did_setup()) {
@@ -24,17 +24,15 @@ function uppsite_get_iframe_url() {
             $prefix = UPPSITE_REMOTE_SECURE_DASHBOARD;
             $page = str_replace(UPPSITE_ADMIN_SETTINGS . "-", "", $adminPage);
             if (isset($_GET['sub'])) {
-                $page .= "-" . $_GET['sub'];
+                                $page .= "-" . $_GET['sub'];
             }
         } else {
             $extra = '/' . uppsite_guess_website_type();
         }
-        $token = wp_create_nonce('uppsite_nonce_' . $page);
-        $options = get_option(MYSITEAPP_OPTIONS_DATA);
-        $key = $options['uppsite_key'];
+        $nonce = wp_create_nonce( UPPSITE_NONCE_PREFIX . $page );
+        $apiKey = mysiteapp_get_options_value(MYSITEAPP_OPTIONS_DATA, 'uppsite_key');
         $user = wp_get_current_user();
-        $uid = (int) $user->ID;
-        $requestUrl = sprintf('/%s/%s/%s/%d/%s%s', $key, $token, mysiteapp_sign_message($token), $uid, $page, $extra);
+        $uid = (int) ( ((int) $user->ID) === 0 ? $user->id : $user->ID );         $requestUrl = sprintf('/%s/%s/%s/%d/%s%s', $apiKey, $nonce, mysiteapp_sign_message($nonce), $uid, $page, $extra);
         $url = $prefix . $requestUrl;
     }
     return $url;
@@ -53,45 +51,10 @@ function uppsite_admin_navbar() {
         }
         echo '</li>';
     }
-    echo '</ul></div><br class="clear"/>';
+    echo '</ul></div>';
 }
 function uppsite_admin_general() {
     ?>
-    <script type="text/javascript">
-        function uppsite_change_page(data) {
-            var href = '?page=uppsite-settings';
-            if (typeof data != "object" && data == "refresh") {
-                href = window.location.href;
-            } else {
-                href += (data.section != "home") ? "-" + data.section : "";
-                if (typeof data.sub != 'undefined' && data.sub != "home") {
-                    href += '&sub=' + data.sub;
-                }
-            }
-            window.location.href = href;
-        }
-        function uppsite_admin_get_images(page_obj){
-            jQuery.get(ajaxurl, { action: 'uppsite_get_info',uppsite_request: 'bizimages',page: page_obj.page}, function( response ) {
-                var iframe = document.getElementById('uppsiteFrame').contentWindow;
-                var repsoneObj = new Object();
-                repsoneObj.data = response;
-                repsoneObj.domid = page_obj.id;
-                pm({
-                    target: iframe,
-                    type: "images_callback",
-                    data: repsoneObj
-                });
-            });
-        }
-        pm.bind("uppsite_remote", uppsite_change_page);
-        pm.bind("uppsite_get_images", uppsite_admin_get_images);
-        pm.bind("uppsite_iframe_height", function (data) {
-            jQuery('#uppsiteFrame').css('height', data);
-        });
-        pm.bind("uppsite_scroll_top", function (data) {
-            jQuery("body").animate({scrollTop:0}, 400);
-        });
-    </script>
     <div class="wrap uppsite-wrap">
         <?php uppsite_admin_navbar() ?>
         <iframe id="uppsiteFrame" style="width:100%;height:900px;min-height:780px"  scrolling="no" frameborder="0" src="<?php echo uppsite_get_iframe_url()?>"></iframe>
@@ -103,10 +66,11 @@ function uppsite_admin_did_setup() {
     if (!is_array($options) || !array_key_exists('site_type', $options)) {
         return false;
     }
-    return in_array($options['site_type'], array(MYSITEAPP_TYPE_BUSINESS, MYSITEAPP_TYPE_CONTENT, MYSITEAPP_TYPE_BOTH));
+    $site_type = $options['site_type'];
+    return in_array($site_type, array(UPPSITE_TYPE_BUSINESS, UPPSITE_TYPE_CONTENT, UPPSITE_TYPE_BOTH));
 }
 function uppsite_admin_setup() {
-    if (!current_user_can('manage_options'))  {
+    if (!current_user_can(UPPSITE_ADMIN_REQUIRED_LEVEL))  {
         wp_die( __('You do not have sufficient permissions to access this page.') );
     }
     ?>
@@ -116,6 +80,7 @@ function uppsite_admin_setup() {
             window.location.reload();
         }
         function uppsite_admin_go_to_settings(data) {
+            // Response can be 'ok-general', thus going to "uppsite-settings-general"
             var okLength = 'ok'.length;
             var pageSuffix = (data.length > okLength) ? data.substring(okLength) : '';
             window.location = '<?php echo esc_js( admin_url( 'admin.php?page=' . UPPSITE_ADMIN_SETTINGS ) ) ?>' + pageSuffix;
@@ -128,12 +93,12 @@ function uppsite_admin_setup() {
                 uppsite_admin_refresh();
             } else if (resp == 2) {
                 // We already installed, move to dashboard
-                uppsite_admin_go_to_settings('ok-general');
+                uppsite_admin_go_to_settings('ok');
             }
         });
     <?php else: ?>
         function uppsite_admin_reset() {
-            jQuery.get(ajaxurl, { action: 'uppsite_reset' }, function( response ) {
+            jQuery.get(ajaxurl, { action: 'uppsite_reset', nonce: '<?php echo wp_create_nonce('uppsite_admin_reset') ?>' }, function( response ) {
                 uppsite_admin_refresh();
             });
         }
@@ -161,7 +126,7 @@ function uppsite_admin_setup() {
 }  
 function mysiteapp_activation_notice(){
     $page = (isset($_GET['page']) ? $_GET['page'] : null);
-    if ($page == "uppsite-setup" || !current_user_can( 'manage_options' ) || !function_exists('admin_url')) {
+    if ($page == "uppsite-setup" || !current_user_can( UPPSITE_ADMIN_REQUIRED_LEVEL )) {
         return;
     }
     if (!uppsite_admin_did_setup()) {
@@ -174,6 +139,11 @@ function uppsite_admin_has_api_creds() {
     exit;
 }
 function uppsite_admin_reset() {
+    if (!current_user_can( UPPSITE_ADMIN_REQUIRED_LEVEL ) ||
+        !array_key_exists( 'nonce', $_GET ) ||
+        !wp_verify_nonce( esc_html($_GET['nonce']), 'uppsite_admin_reset' ))  {
+        wp_die( __('You do not have sufficient permissions to access this page.') );
+    }
     $dataOpts = get_option(MYSITEAPP_OPTIONS_DATA);
     unset($dataOpts['uppsite_key'], $dataOpts['uppsite_secret']);
     update_option(MYSITEAPP_OPTIONS_DATA, $dataOpts);
@@ -200,10 +170,6 @@ function mysiteapp_admin_init() {
         do_action('uppsite_has_upgraded', floatval($old_version));
     }
     uppsite_prefs_init($forcePrefsUpdate);
-}
-function uppsite_push_control_enabled() {
-    $options = get_option(MYSITEAPP_OPTIONS_OPTS, array());
-    return isset($options['push_control']) && $options['push_control'] == '1';
 }
 function uppsite_add_pushcontrol_button() {
     global $post;

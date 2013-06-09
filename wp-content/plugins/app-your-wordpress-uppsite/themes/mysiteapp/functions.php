@@ -1,13 +1,4 @@
 <?php
-remove_all_filters('get_sidebar');
-remove_all_filters('get_header');
-remove_all_filters('get_footer');
-remove_all_actions('loop_start');
-remove_all_actions('loop_end');
-remove_all_actions('the_excerpt');
-remove_all_actions('wp_footer');
-remove_all_actions('wp_print_footer_scripts');
-remove_all_actions('comments_array');
 class MysiteappXmlParser {
     public static function array_to_xml($data, $rootNodeName = 'data', $xml=null)
     {
@@ -57,83 +48,30 @@ function mysiteapp_should_hide_posts() {
 function mysiteapp_should_show_sidebar() {
     return isset($_REQUEST['sidebar_hide']) && $_REQUEST['sidebar_hide'] == '0';
 }
-function mysiteapp_get_pic_from_fb_id($fb_id){
-    return 'http://graph.facebook.com/'.$fb_id.'/picture?type=small';
-}
 function mysiteapp_get_pic_from_fb_profile($fb_profile){
     if(stripos($fb_profile,'facebook') === FALSE) {
         return false;
     }
     $user_id = basename($fb_profile);
-    return mysiteapp_get_pic_from_fb_id($user_id);
+    return sprintf('http://graph.facebook.com/%s/picture?type=small', $user_id);
 }
-function mysiteapp_get_member_for_comment(){
-    $need_g_avatar = true;
-    $user = array();
-    $user['author'] = get_comment_author();
-    $user['link'] = get_comment_author_url();
-    $options = get_option('uppsite_options');
-        if (isset($options['disqus'])){
-        $user['avatar'] = mysiteapp_get_pic_from_fb_profile($user['link']);
-        if ($user['avatar']) {
-            $need_g_avatar = false;
+function mysiteapp_get_member_for_comment() {
+    $user = array(
+        'author' => get_comment_author(),
+        'link' => get_comment_author_url()
+    );
+    if (uppsite_comments_get_system() == UppSiteCommentSystem::FACEBOOK) {
+                $user['avatar'] = mysiteapp_get_pic_from_fb_profile($user['link']);
+    }
+    if (empty($user['avatar']) && function_exists('get_avatar')) {
+        if (function_exists('htmlspecialchars_decode')){
+            $user['avatar']  = htmlspecialchars_decode( uppsite_extract_src_url( get_avatar( get_comment_author_email() ) ) );
         }
     }
-    if ($need_g_avatar){
-        if(function_exists('get_avatar') && function_exists('htmlspecialchars_decode')){
-            $user['avatar']  = htmlspecialchars_decode(uppsite_extract_src_url(get_avatar(get_comment_author_email())));
-        }
-    }?>
-<member>
-    <name><![CDATA[<?php echo $user['author'] ?>]]></name>
-    <member_link><![CDATA[<?php echo $user['link'] ?>]]></member_link>
-    <avatar><![CDATA[<?php echo $user['avatar'] ?>]]></avatar>
-</member><?php
-}
-function mysiteapp_print_single_facebook_comment($fb_comment){
-    $avatar_url = mysiteapp_get_pic_from_fb_id($fb_comment['from']['id']);
-    ?><comment ID="<?php echo $fb_comment['id'] ?>" post_id="<?php echo get_the_ID() ?>" isApproved="true">
-    <permalink><![CDATA[<?php echo get_permalink() ?>]]></permalink>
-    <time><![CDATA[<?php echo $fb_comment['created_time'] ?>]]></time>
-    <unix_time><![CDATA[<?php echo strtotime($fb_comment['created_time']) ?>]]></unix_time>
-    <member>
-        <name><![CDATA[<?php echo $fb_comment['from']['name'] ?>]]></name>
-        <member_link><![CDATA[]]></member_link>
-        <avatar><![CDATA[<?php echo $avatar_url ?>]]></avatar>
-    </member>
-    <text><![CDATA[<?php echo $fb_comment['message'] ?>]]> </text>
-</comment><?php
-}
-function mysiteapp_print_facebook_comments(&$comment_counter){
-    $permalink = get_permalink();
-    $comments_url = MYSITEAPP_FACEBOOK_COMMENTS_URL.$permalink;
-    $res = '';
-    $comment_counter = 0;
-        $comment_json = wp_remote_get($comments_url);
-    $avatar_url = htmlspecialchars_decode(uppsite_extract_src_url(get_avatar(0)));
-        if($comment_json){
-        $comments_arr = json_decode($comment_json['body'],true);
-                if ($comments_arr == NULL||
-            !array_key_exists($permalink,$comments_arr) ||
-            !array_key_exists('data',$comments_arr[$permalink])) {
-            return;
-        }
-        $comments_list = $comments_arr[$permalink]['data'];
-        foreach($comments_list as $comment){
-            $res .= mysiteapp_print_single_facebook_comment($comment,$avatar_url);
-                        if (array_key_exists('comments', $comment)){
-                foreach($comment['comments']['data'] as $inner_comment){
-                    $res .= mysiteapp_print_single_facebook_comment($inner_comment);
-                    $comment_counter++;
-                }
-            }
-            $comment_counter++;
-        }
-    }
-    return $res;
+    return $user;
 }
 function mysiteapp_fix_youtube_helper(&$matches) {
-    $new_width = MYSITEAPP_VIDEO_WIDTH;
+    $new_width = 270;
     $toreturn = $matches['part1']."%d".$matches['part2']."%d".$matches['part3'];
     $height = is_numeric($matches['objectHeight']) ? $matches['objectHeight'] : $matches['embedHeight'];
     $width = is_numeric($matches['objectWidth']) ? $matches['objectWidth'] : $matches['embedWidth'];
@@ -175,7 +113,7 @@ function mysiteapp_logout_url_wrapper() {
 function mysiteapp_print_error($wp_error){
     ?><mysiteapp result="false">
     <?php foreach ($wp_error->get_error_codes() as $code): ?>
-    <error><![CDATA[<?php echo $code ?>]]></error>
+    <error><![CDATA[<?php echo esc_html($code) ?>]]></error>
     <?php endforeach; ?>
 </mysiteapp><?php
     exit();
@@ -221,26 +159,9 @@ function mysiteapp_list_links($thelist){
 function mysiteapp_navigation($thelist){
     return mysiteapp_list($thelist, 'navigation');
 }
-function mysiteapp_comment_to_disq($location, $comment=NULL){
-    $shortname  = strtolower(get_option('disqus_forum_url'));
-    $disq_thread_url = '.disqus.com/thread/';
-    $options = get_option('uppsite_options');
-    if ($comment==NULL)
-        $comment = $location;
-    if(isset($options['disqus']) && strlen($shortname)>1){
-        $post_details = get_post($comment->comment_post_ID, ARRAY_A);
-        $fixed_title = str_replace(' ', '_', $post_details['post_title']);
-        $fixed_title = strtolower($fixed_title);
-        $str = 'author_name='.$comment->comment_author.'&author_email='.$comment->comment_author_email.'&subscribe=0&message='.$comment->comment_content;
-        $post_data = array('body' =>$str);
-        $url = 'http://'.$shortname.$disq_thread_url.$fixed_title.'/post_create/';
-        $result = wp_remote_post($url,$post_data);
-    }
-    return $location;
-}
 function mysiteapp_error_handler($message, $title = '', $args = array()) {
     ?><mysiteapp result="false">
-    <error><![CDATA[<?php echo $message ?>]]></error>
+    <error><![CDATA[<?php echo esc_html($message) ?>]]></error>
 </mysiteapp>
 <?php
     die();
@@ -360,6 +281,12 @@ function mysiteapp_comment_to_facebook(){
 function mysiteapp_homepage_is_only_show_posts() {
     return isset($_REQUEST['onlyposts']);
 }
+function mysiteapp_comment_post_redirect($_location, $_comment) {
+    mysiteapp_print_xml(array(
+        'success' => true
+    ));
+    exit;
+}
 add_filter('the_category','mysiteapp_list_cat');
 add_filter('wp_list_categories','mysiteapp_list_cat');
 add_filter('the_tags','mysiteapp_list_tags');
@@ -376,6 +303,19 @@ add_action('wp_logout', 'mysiteapp_logout', 30);
 add_action('comment_author', 'mysiteapp_comment_author');
 add_filter('authenticate', 'mysiteapp_login', 2, 3);
 add_filter('the_content_more_link','mysiteapp_fix_content_more', 10, 1);
+add_filter('comment_post_redirect', 'mysiteapp_comment_post_redirect', 10, 2);
+add_action( 'wp', 'uppsite_init_remove_filters' , 99999);
+function uppsite_init_remove_filters() {
+    remove_all_filters('get_sidebar');
+    remove_all_filters('get_header');
+    remove_all_filters('get_footer');
+    remove_all_filters('comments_template');     remove_all_actions('loop_start');
+    remove_all_actions('loop_end');
+    remove_all_actions('the_excerpt');
+    remove_all_actions('wp_footer');
+    remove_all_actions('wp_print_footer_scripts');
+    remove_all_actions('comments_array');
+}
 function mysiteapp_fix_content_fb_social($content){
     $fixed_content = preg_replace('/<p class=\"FacebookLikeButton\">.*?<\/p>/','',$content);
     $fixed_content = preg_replace('/<iframe id=\"basic_facebook_social_plugins_likebutton\" .*?<\/iframe>/','',$fixed_content);

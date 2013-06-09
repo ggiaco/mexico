@@ -31,7 +31,7 @@ foreach ($cats_array as $cat) {
     }
     $query = mysiteapp_set_current_query($cat_query);
         if ($query->have_posts()) {
-        $current_cat = get_category_by_slug($query->get('category_name'));
+        $current_cat = get_category($cat);
         while ($query->have_posts()) {
             $query->the_post();             if (uppsite_should_filter( get_permalink() )) {
                 continue;

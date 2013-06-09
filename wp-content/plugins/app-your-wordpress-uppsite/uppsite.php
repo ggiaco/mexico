@@ -4,12 +4,11 @@
  Plugin URI: http://www.uppsite.com/features/
  Description: UppSite is the best way to make your site mobile. Here is how you get started: 1) Activate your plugin by clicking the "Activate" link to the left of this description, and 2) Configure your mobile apps by visiting the Mobile tab under Settings (tab will show only after plugin is activated). Go Mobile&#0153; <strong>**** DISABLING THIS PLUGIN MAY PREVENT YOUR USERS FROM ACCESSING YOUR MOBILE APPS! ****</strong>
  Author: UppSite
- Version: 5.0
+ Version: 5.1.4
  Author URI: https://www.uppsite.com
  */
-require_once( dirname(__FILE__) . '/fbcomments_page.inc.php' );
 if (!defined('MYSITEAPP_AGENT')):
-define('MYSITEAPP_PLUGIN_VERSION', '5.0');
+define('MYSITEAPP_PLUGIN_VERSION', '5.1.4');
 define('MYSITEAPP_WEBAPP_PREF_THEME', 'uppsite_theme_select');
 define('MYSITEAPP_WEBAPP_PREF_TIME', 'uppsite_theme_time');
 define('MYSITEAPP_WEBAPP_PREVIEW', 'uppsite_preview');
@@ -20,9 +19,9 @@ define('MYSITEAPP_OPTIONS_BUSINESS', 'uppsite_biz');
 define('MYSITEAPP_AGENT','MySiteApp');
 require_once( dirname(__FILE__) . '/env_helper.php' );
 define('MYSITEAPP_TEMPLATE_ROOT', mysiteapp_get_template_root() );
-define('MYSITEAPP_TEMPLATE_APP', MYSITEAPP_TEMPLATE_ROOT.'/mysiteapp');
-define('MYSITEAPP_TEMPLATE_WEBAPP', MYSITEAPP_TEMPLATE_ROOT.'/webapp');
-define('MYSITEAPP_TEMPLATE_LANDING', MYSITEAPP_TEMPLATE_ROOT.'/landing');
+define('MYSITEAPP_TEMPLATE_APP', MYSITEAPP_TEMPLATE_ROOT . DIRECTORY_SEPARATOR . 'mysiteapp');
+define('MYSITEAPP_TEMPLATE_WEBAPP', MYSITEAPP_TEMPLATE_ROOT . DIRECTORY_SEPARATOR . 'webapp');
+define('MYSITEAPP_TEMPLATE_LANDING', MYSITEAPP_TEMPLATE_ROOT . DIRECTORY_SEPARATOR . 'landing');
 define('MYSITEAPP_WEBSERVICES_URL', 'http://api.uppsite.com');
 define('UPPSITE_REMOTE_URL', defined('UPPSITE_BASE_SITE') ? constant('UPPSITE_BASE_SITE') : 'https://www.uppsite.com');
 define('MYSITEAPP_PUSHSERVICE', MYSITEAPP_WEBSERVICES_URL.'/push/notification.php');
@@ -30,8 +29,6 @@ define('MYSITEAPP_APP_NATIVE_URL', MYSITEAPP_WEBSERVICES_URL.'/getapplink.php?v=
 define('MYSITEAPP_AUTOKEY_URL', MYSITEAPP_WEBSERVICES_URL.'/autokeys.php');
 define('MYSITEAPP_PREFERENCES_URL', MYSITEAPP_WEBSERVICES_URL . '/preferences.php?ver=' . MYSITEAPP_PLUGIN_VERSION);
 define('MYSITEAPP_WEBAPP_RESOURCES', 'http://static.uppsite.com/v3/webapp');
-define('MYSITEAPP_FACEBOOK_COMMENTS_URL','http://graph.facebook.com/comments/?ids=');
-define('MYSITEAPP_VIDEO_WIDTH', 270);
 define('MYSITEAPP_ONE_DAY', 86400); 
 define('MYSITEAPP_BUFFER_POSTS_COUNT', 5);
 define('MYSITEAPP_HOMEPAGE_POSTS', 5);
@@ -40,9 +37,10 @@ define('MYSITEAPP_HOMEPAGE_DEFAULT_MIN_POSTS', 2);
 define('MYSITEAPP_HOMEPAGE_FRESH_COVER', 'http://static.uppsite.com/plugin/cover.png');
 define('MYSITEAPP_LANDING_DEFAULT_BG', 'http://static.uppsite.com/webapp/landing-background.jpg');
 define('UPPSITE_UPPER_LIMIT', 15);
-define('MYSITEAPP_TYPE_CONTENT', 1);
-define('MYSITEAPP_TYPE_BUSINESS', 2);
-define('MYSITEAPP_TYPE_BOTH', 3);
+define('UPPSITE_TYPE_CONTENT', 1);
+define('UPPSITE_TYPE_BUSINESS', 2);
+define('UPPSITE_TYPE_BOTH', 3);
+define('UPPSITE_NONCE_PREFIX', 'uppsite_nonce_');
 if (!defined('MYSITEAPP_PLUGIN_BASENAME'))
     define('MYSITEAPP_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 if (!defined( 'WP_CONTENT_URL' ))
@@ -53,20 +51,6 @@ if (!defined( 'WP_PLUGIN_URL'))
     define( 'WP_PLUGIN_URL', WP_CONTENT_URL.'/plugins');
 if (!defined('WP_PLUGIN_DIR'))
     define( 'WP_PLUGIN_DIR', WP_CONTENT_DIR.'/plugins');
-if (!array_key_exists('HTTP_USER_AGENT', $_SERVER)) {
-        $_SERVER['HTTP_USER_AGENT'] = null;
-}
-function uppsite_get_type() {
-    if (isset($_GET['forceBlog'])) {
-        return MYSITEAPP_TYPE_CONTENT;
-    }
-    $options = get_option(MYSITEAPP_OPTIONS_OPTS, array());
-    return array_key_exists('site_type', $options) ? $options['site_type'] : false;
-}
-function uppsite_is_business_panel() {
-        $type = uppsite_get_type();
-    return $type == MYSITEAPP_TYPE_BOTH || $type == MYSITEAPP_TYPE_BUSINESS;
-}
 function mysiteapp_should_preview_webapp() {
     if ( function_exists( 'vary_cache_on_function' ) ) {
                 vary_cache_on_function(
@@ -80,7 +64,7 @@ function mysiteapp_should_preview_webapp() {
         $previewRequest = $_REQUEST['uppPreview'];
         $hash = md5(get_bloginfo('pingback_url'));
         if ($previewRequest == $hash) {
-                        setcookie(MYSITEAPP_WEBAPP_PREVIEW, true, time() + 60*60*24*30);
+                        setcookie(MYSITEAPP_WEBAPP_PREVIEW, true, time() + 60*60*24*30, COOKIEPATH, COOKIE_DOMAIN);
             return true;
         }
     }
@@ -90,9 +74,6 @@ function mysiteapp_should_show_webapp() {
     $os = MySiteAppPlugin::detect_specific_os();
     if ($os == "wp") {
                 return false;
-    }
-    if (uppsite_get_type() == MYSITEAPP_TYPE_BUSINESS) {
-        return true;
     }
     $options = get_option(MYSITEAPP_OPTIONS_OPTS);
     return (isset($options['activated']) && $options['activated'] && isset($options['webapp_mode']) &&
@@ -105,8 +86,8 @@ function uppsite_get_native_app($type = "url", $os = null) {
     if (!in_array($type, array("url", "identifier", "store_url", "banner"))) {
                 return null;
     }
-    $options = get_option(MYSITEAPP_OPTIONS_DATA);
-    if (!isset($options['native_apps'])) {
+    $options = get_option(MYSITEAPP_OPTIONS_DATA, array());
+    if (!isset($options['native_apps']) || !is_array($options['native_apps'])) {
         return null;
     }
     $apps = $options['native_apps'];
@@ -187,7 +168,8 @@ class MySiteAppPlugin {
         $this->detect_user_agent();
         if ($this->is_mobile || $this->is_app) {
             if (function_exists('add_theme_support')) {
-                                add_theme_support( 'post-thumbnails');
+                                add_theme_support( 'post-thumbnails' );
+                                add_theme_support( 'automatic-feed-links' );
             }
             $this->original_values = array(
                 'template' => get_template(),
@@ -203,18 +185,18 @@ class MySiteAppPlugin {
     private function _is_agent() {
         if ( function_exists( 'vary_cache_on_function' ) ) {
             vary_cache_on_function(
-                'return strpos($_SERVER["HTTP_USER_AGENT"], "' . MYSITEAPP_AGENT . '") !== false;'
+                'return array_key_exists("HTTP_USER_AGENT", $_SERVER) && strpos($_SERVER["HTTP_USER_AGENT"], "' . MYSITEAPP_AGENT . '") !== false;'
             );
         }
-        return strpos($_SERVER['HTTP_USER_AGENT'], MYSITEAPP_AGENT) !== false;
+        return array_key_exists('HTTP_USER_AGENT', $_SERVER) &&  strpos($_SERVER['HTTP_USER_AGENT'], MYSITEAPP_AGENT) !== false;
     }
     static private function is_specific_os($osUAs) {
         if ( function_exists( 'vary_cache_on_function' ) ) {
             vary_cache_on_function(
-                'return (bool)preg_match("/(' . implode("|", $osUAs). ')/i", $_SERVER["HTTP_USER_AGENT"]);'
+                'return array_key_exists("HTTP_USER_AGENT", $_SERVER) && (bool)preg_match("/(' . implode("|", $osUAs). ')/i", $_SERVER["HTTP_USER_AGENT"]);'
             );
         }
-        return (bool)preg_match('/('.implode('|', $osUAs).')/i', $_SERVER['HTTP_USER_AGENT']);
+        return array_key_exists("HTTP_USER_AGENT", $_SERVER) && (bool)preg_match('/('.implode('|', $osUAs).')/i', $_SERVER['HTTP_USER_AGENT']);
     }
     function detect_user_agent() {
         if ($this->_is_agent()) {
@@ -232,7 +214,7 @@ class MySiteAppPlugin {
         if (isset($_COOKIE[MYSITEAPP_WEBAPP_PREF_THEME]) && isset($_COOKIE[MYSITEAPP_WEBAPP_PREF_TIME])) {
             $ret = $_COOKIE[MYSITEAPP_WEBAPP_PREF_THEME];
             $saveTime = $_COOKIE[MYSITEAPP_WEBAPP_PREF_TIME];
-                        setcookie(MYSITEAPP_WEBAPP_PREF_THEME, $ret, time() + $saveTime);
+                        setcookie(MYSITEAPP_WEBAPP_PREF_THEME, $ret, time() + $saveTime, COOKIEPATH, COOKIE_DOMAIN);
         }
         switch ($ret) {
             case "webapp":
@@ -266,7 +248,8 @@ class MySiteAppPlugin {
 foreach (MySiteAppPlugin::$_mobile_ua_os as $osName => $osUA) {
     MySiteAppPlugin::$_mobile_ua = array_merge(MySiteAppPlugin::$_mobile_ua, $osUA);
 }
-require_once( dirname(__FILE__) . '/business.php' );
+require_once( dirname(__FILE__) . '/includes/business.php' );
+require_once( dirname(__FILE__) . '/includes/comments_helper.php' );
 global $msap;
 $msap = new MySiteAppPlugin();
 function mysiteapp_filter_template($newValue) {
@@ -380,6 +363,39 @@ function mysiteapp_extract_thumbnail(&$content = null) {
     }
     return $thumb_url;
 }
+function mysiteapp_get_post_featured_image( $post_id = null ) {
+    $image = null;
+        $imageAlgos = uppsite_get_image_algos();
+    if (uppsite_has_image_algo($imageAlgos, UppSiteImageAlgo::NATIVE_FUNC) &&
+        function_exists('has_post_thumbnail') && has_post_thumbnail()) {
+                $image = get_the_post_thumbnail( $post_id, 'full' );
+        if (empty($image)) {
+            $image = get_the_post_thumbnail( $post_id, 'large' );
+        }
+    }
+    if (uppsite_has_image_algo($imageAlgos, UppSiteImageAlgo::THE_ATTACHED_IMAGE) &&
+        empty($image) && function_exists('the_attached_image')) {
+                $temp_thumb = the_attached_image('img_size=full&echo=false');
+        if (!empty($temp_thumb)) {
+            $image = $temp_thumb;
+        }
+    }
+    if (uppsite_has_image_algo($imageAlgos, UppSiteImageAlgo::GET_THE_IMAGE) &&
+        empty($image) && function_exists('get_the_image')) {
+                $temp_thumb = get_the_image(array('size' => 'full', 'echo' => false, 'link_to_post' => false));
+        if (!empty($temp_thumb)) {
+            $image = $temp_thumb;
+        }
+    }
+    if (uppsite_has_image_algo($imageAlgos, UppSiteImageAlgo::CUSTOM_FIELD) &&
+        empty($image) && !is_null($imageAlgos['extra'])) {
+                $image = get_post_meta(get_the_ID(), $imageAlgos['extra'], true);
+    }
+    if (!empty($image)) {
+        $image = uppsite_extract_src_url($image);
+    }
+    return $image;
+}
 function mysiteapp_sign_message($message){
     $options = get_option(MYSITEAPP_OPTIONS_DATA);
     $str = $options['uppsite_secret'].$message;
@@ -390,16 +406,11 @@ function mysiteapp_is_need_new_link(){
     $lastCheck = isset($dataOptions['last_native_check']) ? $dataOptions['last_native_check'] : 0;
         return time() > $lastCheck + MYSITEAPP_ONE_DAY;
 }
-function uppsite_biz_init() {
-    $bizOpts = get_option(MYSITEAPP_OPTIONS_BUSINESS, array());
-    update_option(MYSITEAPP_OPTIONS_BUSINESS, $bizOpts);
-}
 function uppsite_prefs_init($forceUpdate = false) {
     if (!uppsite_api_values_set()) {
                 return;
     }
-        uppsite_biz_init();
-    mysiteapp_get_app_links();
+        mysiteapp_get_app_links();
     $prefsOptions = get_option(MYSITEAPP_OPTIONS_PREFS, array());
     if (count($prefsOptions) > 0 && !$forceUpdate) {
         return;
@@ -464,13 +475,13 @@ function mysiteapp_set_webapp_theme() {
         if (!in_array($templateType, array("webapp", "normal"))) {
         return;
     }
-    $cookieTime = $templateSaveForever ? 60*60*24*7 : 60*60;     setcookie(MYSITEAPP_WEBAPP_PREF_THEME, $templateType, time() + $cookieTime);
-        setcookie(MYSITEAPP_WEBAPP_PREF_TIME, $cookieTime, time() + 60*60*24*30);
+    $cookieTime = $templateSaveForever ? 60*60*24*7 : 60*60;     setcookie(MYSITEAPP_WEBAPP_PREF_THEME, $templateType, time() + $cookieTime, COOKIEPATH, COOKIE_DOMAIN);
+        setcookie(MYSITEAPP_WEBAPP_PREF_TIME, $cookieTime, time() + 60*60*24*30, COOKIEPATH, COOKIE_DOMAIN);
         $cleanUrl = remove_query_arg(array("msa_theme_select","msa_theme_save_forever"));
     wp_safe_redirect($cleanUrl);
     exit;
 }
-function mysiteapp_update_mysiteapp_options($curOpts, $newVals){
+function uppsite_update_options($curOpts, $newVals){
     $newVals = json_decode($newVals, true);
     if ($newVals === false) {
         return $curOpts;
@@ -488,6 +499,9 @@ function uppsite_provide_feedback($feedback) {
     exit;
 }
 function uppsite_reset_db_vals($dataOpts) {
+    if (!array_key_exists('uppsite_key', $dataOpts) || !array_key_exists('uppsite_secret', $dataOpts)) {
+                uppsite_provide_feedback('Options reset failed.');
+    }
     update_option(MYSITEAPP_OPTIONS_DATA, array(
         'uppsite_key' => $dataOpts['uppsite_key'],
         'uppsite_secret' => $dataOpts['uppsite_secret']
@@ -520,7 +534,7 @@ function uppsite_remote_activation() {
         return;
     }
     $data = json_decode($decoded['data'], true);
-    $prefsOptions = get_option(MYSITEAPP_OPTIONS_PREFS, array());
+    $prefOpts = get_option(MYSITEAPP_OPTIONS_PREFS, array());
     $opts = get_option(MYSITEAPP_OPTIONS_OPTS, array());
     $bizOpts =  get_option(MYSITEAPP_OPTIONS_BUSINESS, array());
     $refreshPrefs = false;
@@ -543,10 +557,10 @@ function uppsite_remote_activation() {
                 $opts[$key] = $val;
                 break;
             case "change_biz":
-                $bizOpts = mysiteapp_update_mysiteapp_options($bizOpts, $val);
+                $bizOpts = uppsite_update_options($bizOpts, $val);
                 break;
             case "change_prefs":
-                $prefsOptions = mysiteapp_update_mysiteapp_options($prefsOptions, $val);
+                $prefOpts = uppsite_update_options($prefOpts, $val);
                 break;
             case 'debug_uppsite':
                 $debugPrefs = true;
@@ -559,15 +573,15 @@ function uppsite_remote_activation() {
     update_option(MYSITEAPP_OPTIONS_DATA ,$dataOpts);
     update_option(MYSITEAPP_OPTIONS_OPTS, $opts);
     update_option(MYSITEAPP_OPTIONS_BUSINESS, $bizOpts);
-    update_option(MYSITEAPP_OPTIONS_PREFS, $prefsOptions);
+    update_option(MYSITEAPP_OPTIONS_PREFS, $prefOpts);
     if ($refreshPrefs) {
                 uppsite_prefs_init(true);
     }
     if ($debugPrefs) {
-        unset($dataOpts['uppsite_key'], $dataOpts['uppsite_secret']);
+                unset($dataOpts['uppsite_key'], $dataOpts['uppsite_secret']);
         $uppsite_options[MYSITEAPP_OPTIONS_DATA] = $dataOpts;
         $uppsite_options[MYSITEAPP_OPTIONS_OPTS] = $opts;
-        $uppsite_options[MYSITEAPP_OPTIONS_PREFS] = $prefsOptions;
+        $uppsite_options[MYSITEAPP_OPTIONS_PREFS] = $prefOpts;
                 uppsite_provide_feedback($uppsite_options);
     }
     uppsite_provide_feedback(true);
@@ -578,9 +592,9 @@ function mysiteapp_get_ads() {
         "active" => $ad_active && $ad_active != "false",
         "html" => mysiteapp_get_prefs_value('ads', '')
     );
-    if (mysiteapp_get_prefs_value('matomy_site_id', false) && mysiteapp_get_prefs_value('matomy_zone_id', false)) {
-        $ret['matomy_site_id'] = mysiteapp_get_prefs_value('matomy_site_id');
-        $ret['matomy_zone_id'] = mysiteapp_get_prefs_value('matomy_zone_id');
+    if (($nexageDcn = mysiteapp_get_prefs_value('ads_nexage_dcn', false)) !== false) {
+        $ret['nexage_dcn'] = $nexageDcn;
+        $ret['nexage_params'] = mysiteapp_get_prefs_value('ads_nexage_params', null);
     }
     $state_arr = array(
         '0' => 'none',
@@ -591,22 +605,19 @@ function mysiteapp_get_ads() {
     $ret['ad_state'] = array_key_exists($ad_state, $state_arr) ? $state_arr[$ad_state] : 'top';
     return json_encode($ret);
 }
-function mysiteapp_get_options_value($options_name,$key,$default = null){
-    $prefs = get_option($options_name);
-    if ($prefs === false || !is_array($prefs) ||
-        ( is_array($prefs) && !array_key_exists($key, $prefs) )) {
-        return $default ? $default : null;
+function mysiteapp_get_options_value($options_name, $key, $default = null){
+    $arr = get_option($options_name);
+    if ($arr === false || !is_array($arr) ||
+        ( is_array($arr) && !array_key_exists($key, $arr) )) {
+        return !is_null($default) ? $default : null;
     }
-    if (!is_null($default) && empty($prefs[$key])) {
+    if (!is_null($default) && empty($arr[$key])) {
         return $default;
     }
-    return $prefs[$key];
+    return $arr[$key];
 }
 function mysiteapp_get_prefs_value($key, $default = null) {
     return mysiteapp_get_options_value(MYSITEAPP_OPTIONS_PREFS, $key, $default);
-}
-function mysiteapp_get_optionsbiz_value($key, $default = null){
-    return mysiteapp_get_options_value(MYSITEAPP_OPTIONS_BUSINESS, $key, $default);
 }
 function mysiteapp_convert_datetime($datetime) {
     $values = explode(" ", $datetime);
@@ -619,18 +630,27 @@ function uppsite_api_values_set() {
     return array_key_exists('uppsite_key', $dataOpts) && array_key_exists('uppsite_secret', $dataOpts) &&
         !empty($dataOpts['uppsite_key']) && !empty($dataOpts['uppsite_secret']);
 }
+function uppsite_push_control_enabled() {
+    $options = get_option(MYSITEAPP_OPTIONS_OPTS, array());
+    return isset($options['push_control']) && $options['push_control'] == '1';
+}
 function mysiteapp_send_push($post_id, $post_details = NULL) {
-    if (!uppsite_api_values_set() ||
-        uppsite_push_control_enabled() && !isset($_POST['send_push'])) {
+    if (!uppsite_api_values_set()) {
                 return;
     }
     if (is_null($post_details)) {
                 $post_details = get_post($post_id, ARRAY_A);
     }
+    if (uppsite_push_control_enabled() && !isset($_POST['send_push'])) {
+                $postMeta = get_post_meta($post_id, '_uppsite_push', true);
+        if ( "1" != $postMeta ) {
+                        return;
+        }
+    }
     $dataOpts = get_option(MYSITEAPP_OPTIONS_DATA);
     $json_str = json_encode(array(
         'title' => $post_details['post_title'],
-        'post_id' => $post_details['ID'],
+        'post_id' => $post_id,
         'utime' => mysiteapp_convert_datetime($post_details['post_date']),
         'api_key' => $dataOpts['uppsite_key']
     ));
@@ -646,12 +666,23 @@ function mysiteapp_new_post_push($post_id) {
     }
 }
 function mysiteapp_future_post_push($post_id) {
-    $post_details = get_post($post_id, ARRAY_A);
-    if ($post_details['post_status'] != 'publish') { return; }
-    if (!$_POST &&
-        false == (isset($post_details['sticky']) && $post_details['sticky'] == 'sticky')) {
-                mysiteapp_send_push($post_id, $post_details);
+    $post = get_post($post_id, ARRAY_A);
+    if ( empty($post) ) {
+        return;
     }
+    if ( 'publish' != $post['post_status'] ) {
+        return;
+    }
+    if ( isset($post['sticky']) || $post['sticky'] == "sticky" ) {
+        return;
+    }
+        mysiteapp_send_push($post_id, $post);
+}
+function mysiteapp_set_push_status( $post_ID , $post ) {
+    if (!uppsite_push_control_enabled() || defined('DOING_CRON')) {
+        return;
+    }
+    update_post_meta($post_ID, '_uppsite_push', isset($_POST['send_push']) ? "1" : "0");
 }
 function mysiteapp_append_native_link() {
     global $msap, $wp;
@@ -748,34 +779,12 @@ function uppsite_filter_show_on_front($val) {
     global $msap;
     return $msap->has_custom_theme() && mysiteapp_get_prefs_value('always_show_posts', false) ? 'posts' : $val;
 }
-function uppsite_get_biz_pages() {
-    $pages = null;
-    $filter = array(
-        'sort_column' => 'menu_order',
-        'sort_order' => 'ASC',
-    );
-    $bizOpts = get_option(MYSITEAPP_OPTIONS_BUSINESS);
-    $include = null;
-    if (array_key_exists('menu_pages', $bizOpts)) {
-        $include = $bizOpts['menu_pages'];
-        $filter['include'] = $include;
-    }
-    $pages = get_pages($filter);
-    if (!is_null($include)) {
-                array_walk(
-            $pages,
-            create_function('&$page, $key, $include', '$page->menu_order = array_search($page->ID, $include)+1;'),
-            $include
-        );
-    }
-    return $pages;
-}
 function uppsite_ajax_verify_nonce() {
     $nonce = isset($_REQUEST['nonce_name']) ? $_REQUEST['nonce_name'] : null;
     $token = isset($_REQUEST['token']) ? $_REQUEST['token'] : null;
     $requesterUid = isset($_REQUEST['nonce_requester']) && is_numeric($_REQUEST['nonce_requester']) ? $_REQUEST['nonce_requester'] : null;
     if (empty($nonce) || empty($token) || empty($requesterUid) ||
-        strpos($nonce, "uppsite_nonce_") === false) {
+        strpos($nonce, UPPSITE_NONCE_PREFIX) === false) {
         return;
     }
             $requesterUser = new WP_User(""); 
@@ -788,114 +797,16 @@ function uppsite_ajax_verify_nonce() {
     ));
     exit;
 }
-function uppsite_get_bloginfo(){
-    print json_encode(
-        array(
-            'name' => get_bloginfo('name'),
-            'url' => site_url(),
-            'version' => get_bloginfo('version'),
-            'tagline' => get_bloginfo('description')
-        )
-    );
-}
-define('MYSITEAPP_GET_MAX_ITEMS',100);
-function uppsite_get_bizinfo(){
-    $businessData = get_option(MYSITEAPP_OPTIONS_BUSINESS);
-    unset($businessData['all_images']);
-    unset($businessData['selected_images']);
-    unset($businessData['featured']);
-    if (is_array($businessData)) {
-        print json_encode($businessData);
-    }
-}
-function uppsite_remove_duplicate_photos($photos = array()){
-    $data = array_unique($photos,SORT_STRING);
-    return $data;
-}
-function uppsite_set_selected_image($list,$listname,&$result){
-    foreach($result as $key=>$val){
-        if(in_array(html_entity_decode($result[$key]['img_url']),$list,false)){
-            array_push($result[$key]['found'],$listname);
-        }
-    }
-    return $result;
-}
- function uppsite_set_image_array_format($arr){
-    $result = array();
-    foreach (array_values($arr) as $val) {
-        $result[] = array('img_url'=>$val,'found'=>array());
-    }
-    return $result;
-}
- function uppsite_get_images_lib($images_ar,$selected,$featured){
-     if(!isset($images_ar)) return array();
-    $selected_image['photos'] = is_array($selected) ?  $selected :  array();
-    $selected_image['homepage'] =is_array($featured) ?  $featured :  array();
-    $res['all_images'] = uppsite_set_image_array_format($images_ar);
-    $res['all_images'] = uppsite_set_selected_image($selected_image['photos'],'photos',$res['all_images']);
-    $res['all_images'] = uppsite_set_selected_image($selected_image['homepage'],'homepage',$res['all_images']);
-    return $res['all_images'];
-}
-define('IMAGES_PER_PAGE',30);
-function uppsite_get_bizimages(){
-    $page = isset($_REQUEST['page']) ? $_REQUEST['page'] : 0;
-    $businessData = get_option(MYSITEAPP_OPTIONS_BUSINESS);
-    $image_ar = $businessData['all_images'];
-    $image_ar = uppsite_remove_duplicate_photos($image_ar);
-    $current_page_ar = array_slice($image_ar,$page*IMAGES_PER_PAGE,IMAGES_PER_PAGE);
-    $list_image = array();
-    if(count($current_page_ar) > 0){
-        $list_image = uppsite_get_images_lib($current_page_ar, $businessData['selected_images'], $businessData['featured']);
-    }
-    print json_encode($list_image);
-    exit;
-}
-function uppsite_get_categorieslist() {
-    $allCats = array_map(
-        create_function('$cat', 'return array($cat->term_id, $cat->name);'),
-        get_categories( 'order=desc&orderby=count&number='.MYSITEAPP_GET_MAX_ITEMS)
-    );
-    $selectedCats = uppsite_homepage_get_categories();
-    print json_encode(array(
-        'all' => $allCats,
-        'selected' => $selectedCats
-    ));
-}
-function uppsite_get_pagelist() {
-    $filterValues = create_function('$page', 'return array($page->ID, $page->post_title);');
-    $allPages = array_map(
-        $filterValues,
-        get_pages('sort_order=ASC&post_status=publish&post_type=page&sort_column=post_title&number=' . MYSITEAPP_GET_MAX_ITEMS)
-    );
-    $selectedPages = uppsite_get_biz_pages();
-    usort($selectedPages, create_function('$a, $b', 'if ($a->menu_order == $b->menu_order) { return 0; }; return ($a->menu_order < $b->menu_order) ? -1 : 1;'));
-    $selectedPages = array_map(
-        $filterValues,
-        $selectedPages
-    );
-    print json_encode(array(
-        'all' => $allPages,
-        'selected' => $selectedPages
-    ));
-}
-function uppsite_ajax_get_info(){
-    $req = sanitize_text_field($_REQUEST['uppsite_request']);
-    if (function_exists('uppsite_get_' . $req)) {
-         call_user_func('uppsite_get_' . $req);
-    }
-    exit;
-}
 function uppsite_supress_deprecated_warnings() {
     return false;
 }
 add_action('wp', 'mysiteapp_set_webapp_theme');
 add_action('init', 'uppsite_remote_activation');
-add_action('publish_post','mysiteapp_new_post_push', 10, 1);
-add_action('publish_future_post','mysiteapp_future_post_push', 10, 1);
+add_action('publish_post', 'mysiteapp_new_post_push', 10, 1);
+add_action('publish_future_post', 'mysiteapp_future_post_push', 10, 1);
+add_filter('wp_insert_post', 'mysiteapp_set_push_status', 99, 2);
 add_action('wp_head', 'mysiteapp_append_native_link');
-add_action('pre_get_posts', 'uppsite_pre_get_posts');
+add_action('pre_get_posts', 'uppsite_pre_get_posts', 99999); 
 add_filter('option_show_on_front', 'uppsite_filter_show_on_front');
 add_action('wp_ajax_nopriv_uppsite_verify_nonce', 'uppsite_ajax_verify_nonce');
-add_action('wp_ajax_nopriv_uppsite_get_info', 'uppsite_ajax_get_info');
-add_action('wp_ajax_uppsite_get_info', 'uppsite_ajax_get_info');  
 endif; 

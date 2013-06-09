@@ -20,7 +20,7 @@ if (uppsite_is_business_panel()) {
         $pages_result[$i]['post_parent'] = $page->post_parent;
         $i++;
     }
-    if (!$hasBlog && uppsite_get_type() == MYSITEAPP_TYPE_BOTH) {
+    if (!$hasBlog && uppsite_get_type() == UPPSITE_TYPE_BOTH) {
                 $pages_result[$i] = array(
             'permalink' => '',
             'title' => 'Blog',

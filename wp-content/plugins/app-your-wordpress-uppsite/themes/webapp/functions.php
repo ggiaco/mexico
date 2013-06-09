@@ -12,12 +12,12 @@ function uppsite_get_webapp_dir_uri() {
     if ( function_exists( 'wpcom_vip_noncdn_uri' ) ) {
         return trailingslashit( wpcom_vip_noncdn_uri( dirname( __FILE__ ) ) );
     } else {
-        return get_template_directory_uri();
+        return uppsite_get_template_directory_uri();
     }
 }
 function uppsite_get_appid() {
-    $data = get_option(MYSITEAPP_OPTIONS_DATA);
-    return isset($data['app_id']) ? $data['app_id'] : 0;
+    $data = get_option(MYSITEAPP_OPTIONS_DATA, array());
+    return array_key_exists('app_id', $data) ? $data['app_id'] : 0;
 }
 function uppsite_get_member() {
     $avatar = null;
@@ -78,6 +78,17 @@ function uppsite_match($pattern, $subject) {
     }
     return $ret;
 }
+function uppsite_get_type() {
+    if (isset($_GET['forceBlog'])) {
+        return UPPSITE_TYPE_CONTENT;
+    }
+    $options = get_option(MYSITEAPP_OPTIONS_OPTS, array());
+    return array_key_exists('site_type', $options) ? $options['site_type'] : false;
+}
+function uppsite_is_business_panel() {
+        $type = uppsite_get_type();
+    return $type == UPPSITE_TYPE_BOTH || $type == UPPSITE_TYPE_BUSINESS;
+}
 function uppsite_process_body_filters(&$content) {
     $filters = json_decode(mysiteapp_get_prefs_value('body_filter', null));
     if (count($filters) == 0) {
@@ -136,18 +147,19 @@ function uppsite_process_post($with_content = false) {
         $post_content = ob_get_contents();
         ob_get_clean();
     }
-    $ret['thumb_url'] = mysiteapp_extract_thumbnail($post_content);
+        $ret['thumb_url'] = isset($_GET['business']) ? null : mysiteapp_extract_thumbnail($post_content);
     if ($with_content) {
         uppsite_process_body_filters($post_content);
         $ret['content'] = $post_content;
     }
-        $maxChar = is_null($ret['thumb_url']) ? UPPSITE_MAX_TITLE_LENGTH + 15 : UPPSITE_MAX_TITLE_LENGTH;
+        $maxChar = UPPSITE_MAX_TITLE_LENGTH + ( is_null($ret['thumb_url']) ? 15 : 0 );
     $maxChar += (isset($_GET['view']) && $_GET['view'] == "excerpt") ? 0 : 22;
-    $maxChar += ($with_content) ? +10 : 0;
+    $maxChar += ($with_content) ? 10 : 0;
     if (uppsite_is_homepage_carousel()) {
         $maxChar = 66;
     }
     $orgLen = uppsite_strlen($ret['title']);
+    $newTitle = null;
     if ($orgLen > $maxChar) {
         $matches = uppsite_match("(.{0," . $maxChar . "})\s", $ret['title']);
         $newTitle = rtrim($matches[1]);
@@ -179,6 +191,7 @@ function uppsite_get_webapp_page($template) {
         call_user_func('uppsite_func_' . UPPSITE_AJAX);
         return null;
     }
+        header("Content-Type: application/json");
     $page = TEMPLATEPATH . "/" . UPPSITE_AJAX . "-ajax.php";
     if (!file_exists($page)) {
         $page = TEMPLATEPATH . "/index-ajax.php";
@@ -250,6 +263,23 @@ function uppsite_func_create_quick_post() {
     }
     exit;
 }
+function uppsite_webapp_posts_list_view() {
+    $postsList = mysiteapp_get_prefs_value('posts_list_view', 'excerpt');
+    $listType = null;
+    switch ($postsList) {
+        case "ffull_rtitle":
+            $listType = "ffullrtitlelist";
+            break;
+        case "title":
+            $listType = "titlelist";
+            break;
+        case "excerpt":
+        default:
+            $listType = "excerptlist";
+            break;
+    }
+    return $listType;
+}
 function uppsite_rgbhex2arr($rgbHex) {
     return array(
         hexdec(substr($rgbHex, 1, 2)),         hexdec(substr($rgbHex, 3, 2)),         hexdec(substr($rgbHex, 5, 2))     );
@@ -317,7 +347,7 @@ function uppsite_rgb_darken($rgbHex, $percent) {
 function uppsite_get_colours() {
     $navbarColor = mysiteapp_get_prefs_value("navbar_tint_color", MYSITEAPP_WEBAPP_DEFAULT_NAVBAR_COLOR);
     $conceptColor = mysiteapp_get_prefs_value("application_global_color",
-        in_array(uppsite_get_type(), array(MYSITEAPP_TYPE_BUSINESS, MYSITEAPP_TYPE_BOTH)) ?
+        in_array(uppsite_get_type(), array(UPPSITE_TYPE_BUSINESS, UPPSITE_TYPE_BOTH)) ?
             MYSITEAPP_WEBAPP_DEFAULT_BIZ_COLOR : MYSITEAPP_WEBAPP_DEFAULT_CONTENT_COLOR);
     $navbarDarkColor = uppsite_rgb_darken($navbarColor, 10.3); 
     $conceptLightColor = uppsite_rgb_lighten($conceptColor, 10);
@@ -349,6 +379,51 @@ function uppsite_short_circuit_show_on_front($val) {
     }
     return 'posts';
 }
+function uppsite_webapp_get_vcf() {
+    if (!isset($_REQUEST['uppsite_get_vcf'])) { return; }
+        $vCardFunc = null;
+    switch (MySiteAppPlugin::detect_specific_os()) {
+        case "wp":
+        case "android":
+        $vCardFunc = "displayVcard";
+            break;
+        case "ios":
+            $vCardFunc = "displayiOSVcard";
+            break;
+    }
+    if (is_null($vCardFunc)) { return; } 
+    $dbInfo = get_option(MYSITEAPP_OPTIONS_BUSINESS);
+    $card = array(
+        'url' => home_url()
+    );
+    if (!empty($dbInfo['name'])) {
+        $card['company'] = $dbInfo['name'];
+    }
+    if (!empty($dbInfo['description'])) {
+        $card['note'] = $dbInfo['description'];
+    }
+    if (!empty($dbInfo['contact_phone'])) {
+                $card['phone'] = preg_replace("/[\.\(\)\s]/im", "", $dbInfo['contact_phone']);
+    }
+    if (!empty($dbInfo['contact_address'])) {
+        $address = $dbInfo['contact_address'];
+        if (!empty($dbInfo['contact_address_vcf'])) {
+            $address = $dbInfo['contact_address_vcf'];
+        } else {
+            $address = implode(";", explode("\n", str_replace(",", "\n", $address)));
+        }
+        $card['address'] = $address;
+    }
+    if (!empty($dbInfo['admin_email'])) {
+                $card['email'] = $dbInfo['admin_email'];
+    }
+    Vcard_Creator::$vCardFunc($card);
+    exit;
+}
+function uppsite_webapp_bool_to_str($bool) {
+    return $bool ? "true" : "false";
+}
+add_filter( 'after_setup_theme', 'uppsite_webapp_get_vcf' );
 add_filter('pre_option_show_on_front', 'uppsite_short_circuit_show_on_front', 10, 1);
 add_filter('index_template', 'uppsite_get_webapp_page');
 add_filter('front_page_template', 'uppsite_get_webapp_page');
@@ -360,6 +435,10 @@ add_filter('tag_template', 'uppsite_get_webapp_page');
 add_filter('archive_template', 'uppsite_get_webapp_page');
 add_filter('login_redirect', 'uppsite_redirect_login', 10, 3);
 add_filter('comment_post_redirect', 'uppsite_redirect_comment', 10, 3);
+add_action( 'wp', 'uppsite_webapp_filters_removal' , 99999);
+function uppsite_webapp_filters_removal() {
+    remove_all_filters('comments_template');
+}
 function uppsite_fix_youtube($content) {
         if (!preg_match_all("/<iframe[^>]*src=\"[^\"]*youtube.com[^\"]*\"[^>]*>[^<]*<\/iframe>/x", $content, $matches)) {
         return $content;
@@ -371,7 +450,6 @@ function uppsite_fix_youtube($content) {
             "width" => "",
             "src" => ""
         );
-        $videoId = "";
         for ($i = 0; $i < count($fields[0]); $i++) {
             $key = $fields[1][$i];
             $vals[$key] = $fields[2][$i];
@@ -382,7 +460,7 @@ function uppsite_fix_youtube($content) {
                 $vals[$key] = str_replace("/embed/", "/watch?v=", $vals[$key]);
             }
         }
-        $replacement = '<p><img class="uppsite-youtube-video" vid="' . $vals['src'] . '" src="http://i.ytimg.com/vi/' . $vals['videoId'] . '/0.jpg"/><img src="" height="10" width="10"/></p>';
+        $replacement = '<p><a target="_blank" href="' . $vals['src'] . '"><img border="0" class="uppsite-youtube-video" src="http://i.ytimg.com/vi/' . $vals['videoId'] . '/0.jpg"/><img src="" height="10" width="10"/><br/>(Click to play)</a></p>';
         $content = str_replace($iframe, $replacement, $content);
     }
     return $content;
